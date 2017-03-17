@@ -245,16 +245,16 @@ nginx_config=$(php_passthrough "$nginx_config")
 if [[ -z ${WEB_CONCURRENCY:-} || "${WEB_CONCURRENCY}" == 0* ]]; then
     maxprocs=$(ulimit -u)
     ram="512M"
-    if [[ -n ${DYNO:-} && "$maxprocs" == "32768" ]]; then
+    if [[ -n ${DYNO:-} && "$maxprocs" -ge "32768" ]]; then
         echo "Optimizing defaults for PX dyno...." >&2
         ram="6G"
-    elif [[ -n ${DYNO:-} && "$maxprocs" == "16384" ]]; then
+    elif [[ -n ${DYNO:-} && "$maxprocs" -ge "16384" ]]; then
         echo "Optimizing defaults for IX dyno...." >&2
         ram="2560M"
-    elif [[ -n ${DYNO:-} && "$maxprocs" == "512" ]]; then
+    elif [[ -n ${DYNO:-} && "$maxprocs" -ge "512" ]]; then
         echo "Optimizing defaults for 2X dyno..." >&2
         ram="1G"
-    elif [[ -n ${DYNO:-} && "$maxprocs" == "256" ]]; then
+    elif [[ -n ${DYNO:-} && "$maxprocs" -ge "256" ]]; then
         echo "Optimizing defaults for 1X dyno..." >&2
     elif [[ -n ${DYNO:-} || $verbose ]]; then
         echo "No dyno detected; using defaults for 1X..." >&2
@@ -264,7 +264,7 @@ if [[ -z ${WEB_CONCURRENCY:-} || "${WEB_CONCURRENCY}" == 0* ]]; then
     read WEB_CONCURRENCY php_memory_limit <<<$(hhvm "${php_configs[@]}" $(composer config vendor-dir 2> /dev/null | tail -n 1)/heroku/heroku-buildpack-php/bin/util/autotune.php "$ram") # tail, as composer echos outdated version warnings to STDOUT
     [[ $WEB_CONCURRENCY -lt 1 ]] && WEB_CONCURRENCY=1
     export WEB_CONCURRENCY
-    
+
     echo "${WEB_CONCURRENCY} threads at ${php_memory_limit}B memory limit." >&2
 else
     echo "Using WEB_CONCURRENCY=${WEB_CONCURRENCY} threads." >&2
@@ -322,11 +322,11 @@ fi
     trap 'echo "tail" >&3;' EXIT
     trap 'trap - TERM; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -TERM $BASHPID' TERM
     trap 'trap - USR1 EXIT; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -USR1 $BASHPID' USR1
-    
+
     touch "${logs[@]}"
-    
+
     tail -qF -n 0 "${logs[@]}" 1>&2 & pid=$!
-    
+
     wait
 ) & pids+=($!)
 disown $!
@@ -337,9 +337,9 @@ echo "Starting hhvm..." >&2
     trap 'echo "hhvm" >&3;' EXIT
     trap 'trap - TERM; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -TERM $BASHPID' TERM
     trap 'trap - USR1 EXIT; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -USR1 $BASHPID' USR1
-    
+
     hhvm --mode server "${php_configs[@]}" & pid=$!
-    
+
     wait
 ) & pids+=($!)
 disown $!
@@ -353,9 +353,9 @@ echo "Starting nginx..." >&2
     trap 'echo "nginx" >&3;' EXIT
     trap 'trap - TERM; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -TERM $BASHPID' TERM
     trap 'trap - USR1 EXIT; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -USR1 $BASHPID' USR1
-    
+
     nginx -g "daemon off; include $nginx_config;" & pid=$!
-    
+
     wait
 ) & pids+=($!)
 disown $!

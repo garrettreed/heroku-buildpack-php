@@ -62,7 +62,7 @@ Options:
                           directives (globals are read from the system's default
                           Nginx configuration files).
                           [default: \$COMPOSER_VENDOR_DIR/heroku/heroku-buildpack-php/conf/nginx/heroku.conf.php]
-  -F <php-fpm.inc.conf>   The path to the configuration file to include at the  
+  -F <php-fpm.inc.conf>   The path to the configuration file to include at the
                           end of php-fpm.conf (see option -f below), in the
                           '[www]' pool section. Recommended approach when
                           customizing PHP-FPM's configuration in most cases,
@@ -258,16 +258,16 @@ nginx_config=$(php_passthrough "$nginx_config")
 if [[ -z ${WEB_CONCURRENCY:-} || "${WEB_CONCURRENCY}" == 0* ]]; then
     maxprocs=$(ulimit -u)
     ram="512M"
-    if [[ -n ${DYNO:-} && "$maxprocs" == "32768" ]]; then
+    if [[ -n ${DYNO:-} && "$maxprocs" -ge "32768" ]]; then
         echo "Optimizing defaults for PX dyno...." >&2
         ram="6G"
-    elif [[ -n ${DYNO:-} && "$maxprocs" == "16384" ]]; then
+    elif [[ -n ${DYNO:-} && "$maxprocs" -ge "16384" ]]; then
         echo "Optimizing defaults for IX dyno...." >&2
         ram="2560M"
-    elif [[ -n ${DYNO:-} && "$maxprocs" == "512" ]]; then
+    elif [[ -n ${DYNO:-} && "$maxprocs" -ge "512" ]]; then
         echo "Optimizing defaults for 2X dyno..." >&2
         ram="1G"
-    elif [[ -n ${DYNO:-} && "$maxprocs" == "256" ]]; then
+    elif [[ -n ${DYNO:-} && "$maxprocs" -ge "256" ]]; then
         echo "Optimizing defaults for 1X dyno..." >&2
     elif [[ -n ${DYNO:-} || $verbose ]]; then
         echo "No dyno detected; using defaults for 1X..." >&2
@@ -278,7 +278,7 @@ if [[ -z ${WEB_CONCURRENCY:-} || "${WEB_CONCURRENCY}" == 0* ]]; then
     read WEB_CONCURRENCY php_memory_limit <<<$(PHP_INI_SCAN_DIR= php ${php_config:+-c "$php_config"} $(composer config vendor-dir 2> /dev/null | tail -n 1)/heroku/heroku-buildpack-php/bin/util/autotune.php -y "$fpm_config" -t "$DOCUMENT_ROOT" "$ram") # tail, as composer echos outdated version warnings to STDOUT
     [[ $WEB_CONCURRENCY -lt 1 ]] && WEB_CONCURRENCY=1
     export WEB_CONCURRENCY
-    
+
     echo "${WEB_CONCURRENCY} processes at ${php_memory_limit}B memory limit." >&2
 else
     echo "Using WEB_CONCURRENCY=${WEB_CONCURRENCY} processes." >&2
@@ -342,23 +342,23 @@ fi
     rm -f $logs_pipe
     mkfifo $logs_pipe
     unset logs_procs
-    
+
     trap '' INT;
     trap 'echo "tail" >&3;' EXIT
     trap 'trap - TERM; kill -TERM "${logs_procs[@]}" 2> /dev/null || true & wait "${logs_procs[@]}" 2> /dev/null || true; rm -f $logs_pipe; [[ ${BASHPID:-} ]] && kill -TERM $BASHPID' TERM
     trap 'trap - USR1 EXIT; kill -TERM "${logs_procs[@]}" 2> /dev/null || true & wait "${logs_procs[@]}" 2> /dev/null || true; rm -f $logs_pipe; [[ ${BASHPID:-} ]] && kill -USR1 $BASHPID' USR1
-    
+
     touch "${logs[@]}"
-    
+
     if [[ $(uname) == "Darwin" ]]; then
         sedbufarg="-l" # mac/bsd sed: -l buffers on line boundaries
     else
         sedbufarg="-u" # unix/gnu sed: -u unbuffered (arbitrary) chunks of data
     fi
-    
+
     tail -qF -n 0 "${logs[@]}" > "$logs_pipe" & logs_procs+=($!)
     sed $sedbufarg -E -e 's/^\[[^]]+\] WARNING: \[pool [^]]+\] child [0-9]+ said into std(err|out): "(.*)("|...)$/\2\3/' -e 's/"$//' < "$logs_pipe" 1>&2 & logs_procs+=($!) # messages that are too long are cut off using "..." by FPM instead of closing double quotation marks; we want to preserve those three dots but not the closing double quotes
-    
+
     wait
 ) & pids+=($!)
 disown $!
@@ -369,9 +369,9 @@ echo "Starting php-fpm..." >&2
     trap 'echo "php-fpm" >&3;' EXIT
     trap 'trap - TERM; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -TERM $BASHPID' TERM
     trap 'trap - USR1 EXIT; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -USR1 $BASHPID' USR1
-    
+
     php-fpm --nodaemonize -y "$fpm_config" ${php_config:+-c "$php_config"} & pid=$!
-    
+
     wait
 ) & pids+=($!)
 disown $!
@@ -385,9 +385,9 @@ echo "Starting nginx..." >&2
     trap 'echo "nginx" >&3;' EXIT
     trap 'trap - TERM; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -TERM $BASHPID' TERM
     trap 'trap - USR1 EXIT; kill -TERM $pid 2> /dev/null || true & wait $pid 2> /dev/null || true; [[ ${BASHPID:-} ]] && kill -USR1 $BASHPID' USR1
-    
+
     nginx -g "daemon off; include $nginx_config;" & pid=$!
-    
+
     wait
 ) & pids+=($!)
 disown $!
